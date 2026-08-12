@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>¿Cuándo enchufo? — Monitor del precio de la luz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0E1A24;
+    --surface: #16283A;
+    --border: #28405A;
+    --text: #EAF2F5;
+    --text-muted: #7C93A3;
+    --cool: #4FD8C4;
+    --warm: #FF8A5B;
+    --verde: #34D399;
+    --rojo: #F87171;
+    --solar: #F2C94C;
+    --eolica: #5BA8D8;
+    --gas: #E85D4A;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+  }
+  a { color: var(--cool); }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 20px 60px; }
+  header.site { padding: 32px 0 24px; border-bottom: 1px solid var(--border); }
+  header.site h1 {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 5vw, 40px);
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  header.site p { color: var(--text-muted); margin: 0; font-size: 15px; }
+  section { margin-top: 40px; }
+  h2.section-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 16px;
+  }
+  p.explicacion {
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.6;
+    margin: -8px 0 16px;
+    max-width: 680px;
+  }
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .hero-price .label { color: var(--text-muted); font-size: 14px; margin-bottom: 6px; }
+  .hero-price .value {
+    font-family: var(--font-mono);
+    font-size: clamp(40px, 8vw, 64px);
+    font-weight: 600;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .hero-price .value .unidad { font-size: 18px; color: var(--text-muted); font-weight: 400; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 12px;
+  }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .hero-compare { text-align: right; color: var(--text-muted); font-size: 14px; max-width: 220px; }
+  .hero-compare strong { color: var(--text); font-family: var(--font-mono); font-weight: 500; }
+
+  .stat-grid { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+  .stat-card {
+    flex: 1;
+    min-width: 220px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .stat-icon { width: 30px; height: 30px; flex: none; }
+  .stat-card.verde .stat-icon { color: var(--verde); }
+  .stat-card.rojo .stat-icon { color: var(--rojo); }
+  .stat-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+  .stat-valor { font-family: var(--font-mono); font-size: 24px; font-weight: 600; }
+  .stat-card.verde .stat-valor { color: var(--verde); }
+  .stat-card.rojo .stat-valor { color: var(--rojo); }
+  .stat-hora { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+  .chart-card canvas { max-height: 320px; }
+
+  .horas-baratas { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    min-width: 100px;
+  }
+  .chip .hora { font-size: 13px; color: var(--text-muted); }
+  .chip .precio { font-size: 18px; font-weight: 600; color: var(--cool); margin-top: 2px; }
+
+  .leyenda { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 13px; color: var(--text-muted); }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .leyenda i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  .estado { color: var(--text-muted); font-size: 14px; padding: 60px 0; text-align: center; }
+  .estado.error { color: var(--warm); }
+
+  footer.site {
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  footer.site p { margin: 4px 0; }
+  footer.site a { color: var(--text-muted); text-decoration: underline; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .badge .dot { animation: pulso 2.4s ease-in-out infinite; }
+  }
+  @keyframes pulso {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  :focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <h1>¿Cuándo enchufo?</h1>
+    <p>Precio de la luz en España, hora a hora — datos en directo de ESIOS (Red Eléctrica) y OMIE</p>
+  </header>
+
+  <div id="estado-carga" class="estado">Cargando datos…</div>
+
+  <main id="contenido" style="display:none">
+    <section aria-label="Precio actual">
+      <div class="hero-card">
+        <div class="hero-price">
+          <div class="label" id="hero-hora-label">Precio ahora</div>
+          <div class="value"><span id="hero-valor">—</span><span class="unidad">€/kWh</span></div>
+          <div class="badge" id="hero-badge">
+            <span class="dot" id="hero-dot"></span>
+            <span id="hero-badge-texto">—</span>
+          </div>
+        </div>
+        <div class="hero-compare">
+          Media de los últimos días:<br><strong id="hero-media">—</strong> €/kWh
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card verde">
+          <svg class="stat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M9 21h6M10 18h4M12 3a6 6 0 0 0-4 10.472V16a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.528A6 6 0 0 0 12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div>
+            <div class="stat-label">Mínimo de hoy</div>
+            <div class="stat-valor" id="min-valor">—</div>
+            <div class="stat-hora" id="min-hora">—</div>
+          </div>
+        </div>
+        <div class="stat-card rojo">
+          <svg class="stat-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M9 21h6M10 18h4M12 3a6 6 0 0 0-4 10.472V16a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.528A6 6 0 0 0 12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div>
+            <div class="stat-label">Máximo de hoy</div>
+            <div class="stat-valor" id="max-valor">—</div>
+            <div class="stat-hora" id="max-hora">—</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Evolución del precio">
+      <h2 class="section-title">Evolución del precio</h2>
+      <div class="chart-card">
+        <canvas id="chart-precio" role="img" aria-label="Gráfico de precio por hora"></canvas>
+        <div class="leyenda">
+          <span><i style="background:var(--cool)"></i> Barato</span>
+          <span><i style="background:var(--warm)"></i> Caro</span>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Horas más económicas">
+      <h2 class="section-title">Horas más baratas de hoy</h2>
+      <div class="horas-baratas" id="horas-baratas"></div>
+    </section>
+
+    <section aria-label="Mix de generación y precio" id="seccion-mix">
+      <h2 class="section-title">Mix de generación y precio (hoy)</h2>
+      <p class="explicacion">Cuando hay mucha solar o eólica (baratas de producir), el precio suele bajar; cuando hace falta activar el gas (ciclo combinado, más caro), el precio sube.</p>
+      <div class="chart-card">
+        <canvas id="chart-mix" role="img" aria-label="Gráfico de generación por tecnología junto al precio"></canvas>
+        <div class="leyenda">
+          <span><i style="background:var(--solar)"></i> Solar fotovoltaica</span>
+          <span><i style="background:var(--eolica)"></i> Eólica</span>
+          <span><i style="background:var(--gas)"></i> Ciclo combinado</span>
+          <span><i style="background:var(--text)"></i> Precio (€/kWh)</span>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Comparación de precios" id="seccion-comparacion">
+      <h2 class="section-title">Precio mayorista vs. precio final</h2>
+      <p class="explicacion">Lo que cuesta producir la electricidad no es lo mismo que lo que pagas en tu factura: al precio mayorista se le suman peajes de red, cargos regulados e impuestos — por eso el precio final siempre es más alto, y la diferencia crece en las horas punta.</p>
+      <div class="chart-card">
+        <canvas id="chart-comparacion" role="img" aria-label="Gráfico comparando precio mayorista y precio final"></canvas>
+        <div class="leyenda">
+          <span><i style="background:var(--eolica)"></i> Precio mayorista (lo que cuesta producirla)</span>
+          <span><i style="background:var(--warm)"></i> Precio final (lo que pagas)</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <p>Datos públicos de <a href="https://www.esios.ree.es" target="_blank" rel="noopener">ESIOS (Red Eléctrica de España)</a> y <a href="https://www.omie.es" target="_blank" rel="noopener">OMIE</a>. Trabajo Fin de Máster — se actualiza sola al recargar la página.</p>
+    <p id="ultima-actualizacion"></p>
+  </footer>
+</div>
+
+<script>
+const API_BASE = "https://script.google.com/macros/s/AKfycbw2LjQUhaMqJGuLMhhJg091aB8xiJGa7XyBQiUM_RHRCROU-M7mmF1OKiQ3-chgZ8Pe0A/exec";
+const COLOR_MUTED = '#7C93A3';
+const COLOR_GRID = '#28405A';
+const COLOR_TEXT = '#EAF2F5';
+
+async function fetchHoja(nombre, intentos = 2) {
+  for (let intento = 1; intento <= intentos; intento++) {
+    try {
+      const respuesta = await fetch(`${API_BASE}?sheet=${nombre}`);
+      if (!respuesta.ok) throw new Error(`Error al leer la hoja '${nombre}': ${respuesta.status}`);
+      const datos = await respuesta.json();
+      if (datos && datos.error) throw new Error(datos.error);
+      return datos;
+    } catch (error) {
+      if (intento === intentos) throw error;
+      await new Promise(resolve => setTimeout(resolve, 800 * intento));
+    }
+  }
+}
+
+function hoyMadrid() {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date());
+}
+
+function horaActualMadrid() {
+  const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false });
+  return parseInt(fmt.format(new Date()), 10) % 24;
+}
+
+function partesFechaHora(valor) {
+  const texto = String(valor);
+  if (texto.includes('T') && texto.endsWith('Z')) {
+    // La fecha viene en formato ISO UTC (p. ej. "2026-08-04T08:00:00.000Z"),
+    // señal de que el script de Apps Script todavía no formatea a hora de
+    // Madrid. La convertimos aquí mismo, así la página funciona igual.
+    const fechaObj = new Date(texto);
+    const fmtFecha = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const fmtHora = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false });
+    const fecha = fmtFecha.format(fechaObj);
+    const hora = parseInt(fmtHora.format(fechaObj), 10) % 24;
+    return { fecha, hora, texto: `${fecha} ${String(hora).padStart(2, '0')}:00:00` };
+  }
+  // Formato ya en texto local "YYYY-MM-DD HH:mm:ss"
+  const partes = texto.split(' ');
+  const fecha = partes[0];
+  const horaTexto = partes[1] || '00:00:00';
+  const hora = parseInt(horaTexto.split(':')[0], 10);
+  return { fecha, hora, texto };
+}
+
+function masReciente(lista) {
+  return lista.reduce((max, item) => (item.texto > max.texto ? item : max), lista[0]);
+}
+
+function normalizarFecha(valor) {
+  const texto = String(valor);
+  if (texto.includes('T') && texto.endsWith('Z')) {
+    const fechaObj = new Date(texto);
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' });
+    return fmt.format(fechaObj);
+  }
+  return texto.split('T')[0].split(' ')[0];
+}
+
+function colorPorPrecio(precio, min, max) {
+  const t = max > min ? (precio - min) / (max - min) : 0;
+  const cool = [79, 216, 196];
+  const warm = [255, 138, 91];
+  const r = Math.round(cool[0] + t * (warm[0] - cool[0]));
+  const g = Math.round(cool[1] + t * (warm[1] - cool[1]));
+  const b = Math.round(cool[2] + t * (warm[2] - cool[2]));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function formatoHora(hora) {
+  return String(hora).padStart(2, '0') + ':00';
+}
+
+function pivotarMix(filas) {
+  const porHora = {};
+  filas.forEach(f => {
+    const clave = f.fecha_hora;
+    if (!porHora[clave]) porHora[clave] = { fecha_hora: clave };
+    porHora[clave][f.tecnologia] = f.generacion_mw;
+  });
+  return Object.values(porHora).sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora));
+}
+
+async function init() {
+  const estadoEl = document.getElementById('estado-carga');
+  try {
+    const preciosBrutos = await fetchHoja('precios');
+    if (!preciosBrutos || preciosBrutos.length === 0) {
+      throw new Error('La pestaña de precios está vacía todavía. Ejecuta el notebook al menos una vez.');
+    }
+
+    let mixBruto = [];
+    let mixError = null;
+    try { mixBruto = await fetchHoja('mix'); } catch (e) { mixError = e; }
+
+    let omieBruto = [];
+    let omieError = null;
+    try { omieBruto = await fetchHoja('omie'); } catch (e) { omieError = e; }
+
+    const hoy = hoyMadrid();
+    const horaActual = horaActualMadrid();
+
+    const precios = preciosBrutos.map(p => ({ ...p, ...partesFechaHora(p.fecha_hora) }));
+    const preciosHoy = precios.filter(p => p.fecha === hoy);
+    const preciosPasados = precios.filter(p => p.fecha < hoy);
+    const preciosHoyYmanana = precios.filter(p => p.fecha >= hoy).sort((a, b) => a.texto.localeCompare(b.texto));
+
+    if (preciosHoy.length === 0) {
+      throw new Error('Todavía no hay datos de precio para el día de hoy en la Sheet.');
+    }
+
+    // --- Hero: precio actual ---
+    const actual = preciosHoy.find(p => p.hora === horaActual) || masReciente(preciosHoy);
+    const filaMinHoy = preciosHoy.reduce((m, p) => (p.precio_eur_kwh < m.precio_eur_kwh ? p : m), preciosHoy[0]);
+    const filaMaxHoy = preciosHoy.reduce((m, p) => (p.precio_eur_kwh > m.precio_eur_kwh ? p : m), preciosHoy[0]);
+    const minHoy = filaMinHoy.precio_eur_kwh;
+    const maxHoy = filaMaxHoy.precio_eur_kwh;
+
+    document.getElementById('hero-hora-label').textContent = `Precio de ${formatoHora(actual.hora)} a ${formatoHora((actual.hora + 1) % 24)}`;
+    document.getElementById('hero-valor').textContent = actual.precio_eur_kwh.toFixed(4);
+
+    document.getElementById('min-valor').textContent = filaMinHoy.precio_eur_kwh.toFixed(4) + ' €';
+    document.getElementById('min-hora').textContent = `de ${formatoHora(filaMinHoy.hora)} a ${formatoHora((filaMinHoy.hora + 1) % 24)}`;
+    document.getElementById('max-valor').textContent = filaMaxHoy.precio_eur_kwh.toFixed(4) + ' €';
+    document.getElementById('max-hora').textContent = `de ${formatoHora(filaMaxHoy.hora)} a ${formatoHora((filaMaxHoy.hora + 1) % 24)}`;
+
+    const colorActual = colorPorPrecio(actual.precio_eur_kwh, minHoy, maxHoy);
+    document.getElementById('hero-dot').style.background = colorActual;
+    const badgeEl = document.getElementById('hero-badge');
+    badgeEl.style.color = colorActual;
+    badgeEl.style.border = `1px solid ${colorActual}`;
+
+    const posicion = maxHoy > minHoy ? (actual.precio_eur_kwh - minHoy) / (maxHoy - minHoy) : 0;
+    let etiqueta = 'Precio medio';
+    if (posicion < 0.33) etiqueta = 'Hora barata';
+    else if (posicion > 0.66) etiqueta = 'Hora cara';
+    document.getElementById('hero-badge-texto').textContent = etiqueta;
+
+    if (preciosPasados.length > 0) {
+      const media = preciosPasados.reduce((s, p) => s + p.precio_eur_kwh, 0) / preciosPasados.length;
+      document.getElementById('hero-media').textContent = media.toFixed(4);
+    } else {
+      document.getElementById('hero-media').textContent = 'sin histórico todavía';
+    }
+
+    // --- Gráfico de precio (hoy + mañana) ---
+    const etiquetasPrecio = preciosHoyYmanana.map(p => `${p.fecha.slice(5)} ${formatoHora(p.hora)}`);
+    const valoresPrecio = preciosHoyYmanana.map(p => p.precio_eur_kwh);
+    const coloresPrecio = preciosHoyYmanana.map(p => colorPorPrecio(p.precio_eur_kwh, minHoy, maxHoy));
+
+    new Chart(document.getElementById('chart-precio'), {
+      type: 'bar',
+      data: {
+        labels: etiquetasPrecio,
+        datasets: [{
+          data: valoresPrecio,
+          backgroundColor: coloresPrecio,
+          borderRadius: 4,
+          barPercentage: 0.85,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y.toFixed(4)} €/kWh` } }
+        },
+        scales: {
+          y: { ticks: { color: COLOR_MUTED }, grid: { color: COLOR_GRID }, title: { display: true, text: '€/kWh', color: COLOR_MUTED } },
+          x: { ticks: { color: COLOR_MUTED, maxRotation: 90, minRotation: 45 }, grid: { display: false } },
+        }
+      }
+    });
+
+    // --- Horas más baratas de hoy ---
+    const masBaratas = [...preciosHoy].sort((a, b) => a.precio_eur_kwh - b.precio_eur_kwh).slice(0, 5).sort((a, b) => a.hora - b.hora);
+    const contenedorChips = document.getElementById('horas-baratas');
+    masBaratas.forEach(p => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.innerHTML = `<div class="hora">${formatoHora(p.hora)}</div><div class="precio">${p.precio_eur_kwh.toFixed(4)} €</div>`;
+      contenedorChips.appendChild(chip);
+    });
+
+    // --- Mix de generación (hoy) ---
+    const seccionMix = document.getElementById('seccion-mix');
+    if (mixError) {
+      seccionMix.querySelector('.chart-card').innerHTML = `<p class="explicacion">No se ha podido cargar este gráfico (${mixError.message}). Prueba a recargar la página.</p>`;
+    } else if (mixBruto && mixBruto.length > 0) {
+      const mixConPartes = mixBruto.map(m => ({ ...m, ...partesFechaHora(m.fecha_hora) }));
+      const mixHoy = pivotarMix(mixConPartes.filter(m => m.fecha === hoy));
+
+      if (mixHoy.length > 0) {
+        const preciosPorHora = {};
+        preciosHoy.forEach(p => { preciosPorHora[p.hora] = p.precio_eur_kwh; });
+
+        const etiquetasMix = mixHoy.map(m => formatoHora(partesFechaHora(m.fecha_hora).hora));
+        const precioParaMix = mixHoy.map(m => {
+          const hora = partesFechaHora(m.fecha_hora).hora;
+          return preciosPorHora[hora] !== undefined ? preciosPorHora[hora] : null;
+        });
+
+        new Chart(document.getElementById('chart-mix'), {
+          type: 'line',
+          data: {
+            labels: etiquetasMix,
+            datasets: [
+              { label: 'Solar fotovoltaica', data: mixHoy.map(m => m['Solar fotovoltaica'] || 0), backgroundColor: '#F2C94C55', borderColor: '#F2C94C', fill: true, tension: 0.3, yAxisID: 'y' },
+              { label: 'Eólica', data: mixHoy.map(m => m['Eólica'] || 0), backgroundColor: '#5BA8D855', borderColor: '#5BA8D8', fill: true, tension: 0.3, yAxisID: 'y' },
+              { label: 'Ciclo combinado', data: mixHoy.map(m => m['Ciclo combinado'] || 0), backgroundColor: '#E85D4A55', borderColor: '#E85D4A', fill: true, tension: 0.3, yAxisID: 'y' },
+              { label: 'Precio (€/kWh)', data: precioParaMix, borderColor: COLOR_TEXT, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: 0.3, fill: false, yAxisID: 'y1', order: 0 },
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { stacked: true, ticks: { color: COLOR_MUTED }, grid: { color: COLOR_GRID }, title: { display: true, text: 'MW', color: COLOR_MUTED } },
+              y1: { position: 'right', ticks: { color: COLOR_MUTED }, grid: { drawOnChartArea: false }, title: { display: true, text: '€/kWh', color: COLOR_MUTED } },
+              x: { stacked: true, ticks: { color: COLOR_MUTED }, grid: { display: false } },
+            }
+          }
+        });
+      } else {
+        seccionMix.style.display = 'none';
+      }
+    } else {
+      seccionMix.style.display = 'none';
+    }
+
+    // --- Comparación: precio mayorista (OMIE) vs precio final (PVPC) ---
+    const seccionComparacion = document.getElementById('seccion-comparacion');
+    if (omieError) {
+      seccionComparacion.querySelector('.chart-card').innerHTML = `<p class="explicacion">No se ha podido cargar este gráfico (${omieError.message}). Prueba a recargar la página.</p>`;
+    } else if (omieBruto && omieBruto.length > 0) {
+      // OMIE numera las horas de 1 a 24; el resto de la página usa 0-23,
+      // así que las convertimos para poder cruzarlas por la misma hora.
+      const omieConPartes = omieBruto.map(o => ({
+        ...o,
+        fecha: normalizarFecha(o.fecha),
+        horaPvpc: (Number(o.hora) - 1 + 24) % 24,
+      }));
+      const omieHoy = omieConPartes.filter(o => o.fecha === hoy);
+
+      const preciosPorHoraFinal = {};
+      preciosHoy.forEach(p => { preciosPorHoraFinal[p.hora] = p.precio_eur_kwh; });
+
+      const horasComunes = omieHoy
+        .filter(o => preciosPorHoraFinal[o.horaPvpc] !== undefined)
+        .sort((a, b) => a.horaPvpc - b.horaPvpc);
+
+      if (horasComunes.length > 0) {
+        const etiquetasComparacion = horasComunes.map(o => formatoHora(o.horaPvpc));
+        const valoresMayorista = horasComunes.map(o => o.precio_omie_eur_mwh / 1000);
+        const valoresFinal = horasComunes.map(o => preciosPorHoraFinal[o.horaPvpc]);
+
+        new Chart(document.getElementById('chart-comparacion'), {
+          type: 'line',
+          data: {
+            labels: etiquetasComparacion,
+            datasets: [
+              { label: 'Precio mayorista', data: valoresMayorista, borderColor: '#5BA8D8', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 2 },
+              { label: 'Precio final', data: valoresFinal, borderColor: '#FF8A5B', backgroundColor: '#FF8A5B22', fill: '-1', tension: 0.3, pointRadius: 2 },
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)} €/kWh` } }
+            },
+            scales: {
+              y: { ticks: { color: COLOR_MUTED }, grid: { color: COLOR_GRID }, title: { display: true, text: '€/kWh', color: COLOR_MUTED } },
+              x: { ticks: { color: COLOR_MUTED }, grid: { display: false } },
+            }
+          }
+        });
+      } else {
+        seccionComparacion.style.display = 'none';
+      }
+    } else {
+      seccionComparacion.style.display = 'none';
+    }
+
+    // --- Pie de página ---
+    const ultimaFila = masReciente(precios);
+    document.getElementById('ultima-actualizacion').textContent = `Último dato de precio disponible: ${ultimaFila.texto}`;
+
+    estadoEl.style.display = 'none';
+    document.getElementById('contenido').style.display = 'block';
+
+  } catch (error) {
+    estadoEl.textContent = 'No se han podido cargar los datos: ' + error.message;
+    estadoEl.classList.add('error');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
