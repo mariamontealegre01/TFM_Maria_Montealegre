@@ -73,6 +73,42 @@
     align-items: center;
     justify-content: space-between;
   }
+
+  .dia-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+  }
+  .dia-flecha {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-body);
+  }
+  .dia-flecha:hover:not(:disabled) { border-color: var(--cool); color: var(--cool); }
+  .dia-flecha:disabled { opacity: 0.3; cursor: not-allowed; }
+  .dia-info { text-align: center; min-width: 130px; }
+  .dia-label {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .dia-fecha { color: var(--text-muted); font-size: 13px; margin-top: 2px; text-transform: capitalize; }
   .hero-price .label { color: var(--text-muted); font-size: 14px; margin-bottom: 6px; }
   .hero-price .value {
     font-family: var(--font-mono);
@@ -177,6 +213,17 @@
   <div id="estado-carga" class="estado">Cargando datos…</div>
 
   <main id="contenido" style="display:none">
+    <section aria-label="Selector de día">
+      <div class="dia-selector">
+        <button id="dia-anterior" class="dia-flecha" aria-label="Día anterior" type="button">‹</button>
+        <div class="dia-info">
+          <div class="dia-label" id="dia-label">HOY</div>
+          <div class="dia-fecha" id="dia-fecha">—</div>
+        </div>
+        <button id="dia-siguiente" class="dia-flecha" aria-label="Día siguiente" type="button">›</button>
+      </div>
+    </section>
+
     <section aria-label="Precio actual">
       <div class="hero-card">
         <div class="hero-price">
@@ -358,18 +405,27 @@ function pivotarMix(filas) {
 async function init() {
   const estadoEl = document.getElementById('estado-carga');
   try {
-    const preciosBrutos = await fetchHoja('precios');
+    const [preciosResultado, mixResultado, omieResultado] = await Promise.allSettled([
+      fetchHoja('precios'),
+      fetchHoja('mix'),
+      fetchHoja('omie'),
+    ]);
+
+    if (preciosResultado.status === 'rejected') {
+      throw preciosResultado.reason;
+    }
+    const preciosBrutos = preciosResultado.value;
     if (!preciosBrutos || preciosBrutos.length === 0) {
       throw new Error('La pestaña de precios está vacía todavía. Ejecuta el notebook al menos una vez.');
     }
 
     let mixBruto = [];
     let mixError = null;
-    try { mixBruto = await fetchHoja('mix'); } catch (e) { mixError = e; }
+    if (mixResultado.status === 'fulfilled') { mixBruto = mixResultado.value; } else { mixError = mixResultado.reason; }
 
     let omieBruto = [];
     let omieError = null;
-    try { omieBruto = await fetchHoja('omie'); } catch (e) { omieError = e; }
+    if (omieResultado.status === 'fulfilled') { omieBruto = omieResultado.value; } else { omieError = omieResultado.reason; }
 
     const hoy = hoyMadrid();
     const horaActual = horaActualMadrid();
@@ -377,26 +433,18 @@ async function init() {
     const precios = preciosBrutos.map(p => ({ ...p, ...partesFechaHora(p.fecha_hora) }));
     const preciosHoy = precios.filter(p => p.fecha === hoy);
     const preciosPasados = precios.filter(p => p.fecha < hoy);
-    const preciosHoyYmanana = precios.filter(p => p.fecha >= hoy).sort((a, b) => a.texto.localeCompare(b.texto));
 
     if (preciosHoy.length === 0) {
       throw new Error('Todavía no hay datos de precio para el día de hoy en la Sheet.');
     }
 
-    // --- Hero: precio actual ---
+    // --- Hero: precio actual (siempre el momento real, no cambia al navegar por días) ---
     const actual = preciosHoy.find(p => p.hora === horaActual) || masReciente(preciosHoy);
-    const filaMinHoy = preciosHoy.reduce((m, p) => (p.precio_eur_kwh < m.precio_eur_kwh ? p : m), preciosHoy[0]);
-    const filaMaxHoy = preciosHoy.reduce((m, p) => (p.precio_eur_kwh > m.precio_eur_kwh ? p : m), preciosHoy[0]);
-    const minHoy = filaMinHoy.precio_eur_kwh;
-    const maxHoy = filaMaxHoy.precio_eur_kwh;
+    const minHoy = Math.min(...preciosHoy.map(p => p.precio_eur_kwh));
+    const maxHoy = Math.max(...preciosHoy.map(p => p.precio_eur_kwh));
 
     document.getElementById('hero-hora-label').textContent = `Precio de ${formatoHora(actual.hora)} a ${formatoHora((actual.hora + 1) % 24)}`;
     document.getElementById('hero-valor').textContent = actual.precio_eur_kwh.toFixed(4);
-
-    document.getElementById('min-valor').textContent = filaMinHoy.precio_eur_kwh.toFixed(4) + ' €';
-    document.getElementById('min-hora').textContent = `de ${formatoHora(filaMinHoy.hora)} a ${formatoHora((filaMinHoy.hora + 1) % 24)}`;
-    document.getElementById('max-valor').textContent = filaMaxHoy.precio_eur_kwh.toFixed(4) + ' €';
-    document.getElementById('max-hora').textContent = `de ${formatoHora(filaMaxHoy.hora)} a ${formatoHora((filaMaxHoy.hora + 1) % 24)}`;
 
     const colorActual = colorPorPrecio(actual.precio_eur_kwh, minHoy, maxHoy);
     document.getElementById('hero-dot').style.background = colorActual;
@@ -417,44 +465,104 @@ async function init() {
       document.getElementById('hero-media').textContent = 'sin histórico todavía';
     }
 
-    // --- Gráfico de precio (hoy + mañana) ---
-    const etiquetasPrecio = preciosHoyYmanana.map(p => `${p.fecha.slice(5)} ${formatoHora(p.hora)}`);
-    const valoresPrecio = preciosHoyYmanana.map(p => p.precio_eur_kwh);
-    const coloresPrecio = preciosHoyYmanana.map(p => colorPorPrecio(p.precio_eur_kwh, minHoy, maxHoy));
+    // --- Selector de día: mínimo/máximo, gráfico de evolución y horas baratas ---
+    // Todos los días ya están cargados en memoria (vienen del mismo fetch de arriba),
+    // así que navegar entre días no hace ninguna petición nueva.
+    const diasDisponibles = [...new Set(precios.map(p => p.fecha))].sort();
+    let indiceDiaActual = diasDisponibles.indexOf(hoy);
+    if (indiceDiaActual === -1) indiceDiaActual = diasDisponibles.length - 1;
+    let graficoEvolucion = null;
 
-    new Chart(document.getElementById('chart-precio'), {
-      type: 'bar',
-      data: {
-        labels: etiquetasPrecio,
-        datasets: [{
-          data: valoresPrecio,
-          backgroundColor: coloresPrecio,
-          borderRadius: 4,
-          barPercentage: 0.85,
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y.toFixed(4)} €/kWh` } }
-        },
-        scales: {
-          y: { ticks: { color: COLOR_MUTED }, grid: { color: COLOR_GRID }, title: { display: true, text: '€/kWh', color: COLOR_MUTED } },
-          x: { ticks: { color: COLOR_MUTED, maxRotation: 90, minRotation: 45 }, grid: { display: false } },
-        }
+    function diferenciaEnDias(fechaA, fechaB) {
+      const [aA, mA, dA] = fechaA.split('-').map(Number);
+      const [aB, mB, dB] = fechaB.split('-').map(Number);
+      return Math.round((Date.UTC(aA, mA - 1, dA) - Date.UTC(aB, mB - 1, dB)) / 86400000);
+    }
+
+    function formatoEtiquetaDia(fecha) {
+      const diff = diferenciaEnDias(fecha, hoy);
+      if (diff === 0) return 'HOY';
+      if (diff === -1) return 'AYER';
+      if (diff === 1) return 'MAÑANA';
+      const [anio, mes, dia] = fecha.split('-').map(Number);
+      const obj = new Date(Date.UTC(anio, mes - 1, dia, 12));
+      return new Intl.DateTimeFormat('es-ES', { weekday: 'long', timeZone: 'UTC' }).format(obj).toUpperCase();
+    }
+
+    function formatoFechaLarga(fecha) {
+      const [anio, mes, dia] = fecha.split('-').map(Number);
+      const obj = new Date(Date.UTC(anio, mes - 1, dia, 12));
+      return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(obj);
+    }
+
+    function renderizarDia(indice) {
+      const fecha = diasDisponibles[indice];
+      const preciosDelDia = precios.filter(p => p.fecha === fecha).sort((a, b) => a.hora - b.hora);
+      if (preciosDelDia.length === 0) return;
+
+      document.getElementById('dia-label').textContent = formatoEtiquetaDia(fecha);
+      document.getElementById('dia-fecha').textContent = formatoFechaLarga(fecha);
+      document.getElementById('dia-anterior').disabled = indice <= 0;
+      document.getElementById('dia-siguiente').disabled = indice >= diasDisponibles.length - 1;
+
+      const filaMin = preciosDelDia.reduce((m, p) => (p.precio_eur_kwh < m.precio_eur_kwh ? p : m), preciosDelDia[0]);
+      const filaMax = preciosDelDia.reduce((m, p) => (p.precio_eur_kwh > m.precio_eur_kwh ? p : m), preciosDelDia[0]);
+      document.getElementById('min-valor').textContent = filaMin.precio_eur_kwh.toFixed(4) + ' €';
+      document.getElementById('min-hora').textContent = `de ${formatoHora(filaMin.hora)} a ${formatoHora((filaMin.hora + 1) % 24)}`;
+      document.getElementById('max-valor').textContent = filaMax.precio_eur_kwh.toFixed(4) + ' €';
+      document.getElementById('max-hora').textContent = `de ${formatoHora(filaMax.hora)} a ${formatoHora((filaMax.hora + 1) % 24)}`;
+
+      const minDia = filaMin.precio_eur_kwh;
+      const maxDia = filaMax.precio_eur_kwh;
+      const etiquetas = preciosDelDia.map(p => formatoHora(p.hora));
+      const valores = preciosDelDia.map(p => p.precio_eur_kwh);
+      const colores = preciosDelDia.map(p => colorPorPrecio(p.precio_eur_kwh, minDia, maxDia));
+
+      if (graficoEvolucion) {
+        graficoEvolucion.data.labels = etiquetas;
+        graficoEvolucion.data.datasets[0].data = valores;
+        graficoEvolucion.data.datasets[0].backgroundColor = colores;
+        graficoEvolucion.update();
+      } else {
+        graficoEvolucion = new Chart(document.getElementById('chart-precio'), {
+          type: 'bar',
+          data: {
+            labels: etiquetas,
+            datasets: [{ data: valores, backgroundColor: colores, borderRadius: 4, barPercentage: 0.85 }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y.toFixed(4)} €/kWh` } }
+            },
+            scales: {
+              y: { ticks: { color: COLOR_MUTED }, grid: { color: COLOR_GRID }, title: { display: true, text: '€/kWh', color: COLOR_MUTED } },
+              x: { ticks: { color: COLOR_MUTED, maxRotation: 90, minRotation: 45 }, grid: { display: false } },
+            }
+          }
+        });
       }
-    });
 
-    // --- Horas más baratas de hoy ---
-    const masBaratas = [...preciosHoy].sort((a, b) => a.precio_eur_kwh - b.precio_eur_kwh).slice(0, 5).sort((a, b) => a.hora - b.hora);
-    const contenedorChips = document.getElementById('horas-baratas');
-    masBaratas.forEach(p => {
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.innerHTML = `<div class="hora">${formatoHora(p.hora)}</div><div class="precio">${p.precio_eur_kwh.toFixed(4)} €</div>`;
-      contenedorChips.appendChild(chip);
-    });
+      const masBaratas = [...preciosDelDia].sort((a, b) => a.precio_eur_kwh - b.precio_eur_kwh).slice(0, 5).sort((a, b) => a.hora - b.hora);
+      const contenedorChips = document.getElementById('horas-baratas');
+      contenedorChips.innerHTML = '';
+      masBaratas.forEach(p => {
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.innerHTML = `<div class="hora">${formatoHora(p.hora)}</div><div class="precio">${p.precio_eur_kwh.toFixed(4)} €</div>`;
+        contenedorChips.appendChild(chip);
+      });
+    }
+
+    document.getElementById('dia-anterior').onclick = () => {
+      if (indiceDiaActual > 0) { indiceDiaActual--; renderizarDia(indiceDiaActual); }
+    };
+    document.getElementById('dia-siguiente').onclick = () => {
+      if (indiceDiaActual < diasDisponibles.length - 1) { indiceDiaActual++; renderizarDia(indiceDiaActual); }
+    };
+
+    renderizarDia(indiceDiaActual);
 
     // --- Mix de generación (hoy) ---
     const seccionMix = document.getElementById('seccion-mix');
